@@ -34,7 +34,6 @@ func (w *RegistrationWorker) ExecuteRegistration(eventURL, firstName, lastName, 
 
 	for attempt := 1; attempt <= config.RegistrationRetry; attempt++ {
 		w.logger.Info("[%s] Attempt %d/%d", email, attempt, config.RegistrationRetry)
-
 		success, message := w.tryRegistration(eventURL, firstName, lastName, email, organization, proxy)
 
 		if success {
@@ -98,6 +97,8 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 		Args: []string{
 			"--disable-blink-features=AutomationControlled",
 			"--disable-dev-shm-usage",
+			"--no-sandbox",
+			"--disable-setuid-sandbox",
 		},
 	}
 
@@ -107,7 +108,9 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 			Username: playwright.String(proxy.Username),
 			Password: playwright.String(proxy.Password),
 		}
-		w.logger.Info("Using proxy: %s", proxy.Server)
+		w.logger.Info("🌐 Using proxy: %s", proxy.Server)
+	} else {
+		w.logger.Warning("⚠️  No proxy configured - using direct connection")
 	}
 
 	browser, err := pw.Chromium.Launch(launchOptions)
@@ -122,8 +125,8 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 
 	// Create context
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
-		Viewport: &playwright.Size{Width: 1248, Height: 836},
-		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+		Viewport:  &playwright.Size{Width: 1248, Height: 836},
+		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	})
 	if err != nil {
 		return false, fmt.Sprintf("Could not create context: %v", err)
@@ -145,22 +148,38 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 		}
 	}()
 
+	// VERIFY PROXY IS WORKING - Check IP
+	if proxy != nil {
+		w.logger.Info("🔍 Verifying proxy connection...")
+		if _, err := page.Goto("https://api.ipify.org?format=json", playwright.PageGotoOptions{
+			Timeout: playwright.Float(10000),
+		}); err != nil {
+			w.logger.Warning("⚠️  Could not verify proxy IP: %v", err)
+		} else {
+			ipInfo, _ := page.Evaluate("() => document.body.innerText")
+			w.logger.Info("✅ Proxy IP check: %v", ipInfo)
+		}
+	}
+
 	// Perform registration
 	return performRegistration(page, eventURL, firstName, lastName, email, organization, w.logger)
 }
 
 func performRegistration(page playwright.Page, eventURL, firstName, lastName, email, organization string, logger *Logger) (bool, string) {
-	logger.Info("Loading event URL...")
+	logger.Info("📄 Loading event URL...")
 
-	// Navigate to event page
+	// Navigate to event page with LONGER timeout (60s instead of 15s)
 	if _, err := page.Goto(eventURL, playwright.PageGotoOptions{
-		Timeout: playwright.Float(float64(config.PageLoadWait.Milliseconds())),
+		Timeout:   playwright.Float(60000), // 60 seconds
+		WaitUntil: playwright.WaitUntilStateNetworkidle,
 	}); err != nil {
 		return false, fmt.Sprintf("Failed to load page: %v", err)
 	}
 
+	logger.Info("✅ Page loaded successfully")
 	page.WaitForTimeout(2000)
-	logger.Debug("Filling form fields...")
+
+	logger.Debug("📝 Filling form fields...")
 
 	// Fill first name
 	if err := page.Locator("#first_name").Click(); err != nil {
@@ -207,13 +226,13 @@ func performRegistration(page playwright.Page, eventURL, firstName, lastName, em
 	page.WaitForTimeout(1000)
 
 	// Submit
-	logger.Info("Submitting registration...")
+	logger.Info("📤 Submitting registration...")
 	if err := page.Locator("#submitRegistration").Click(); err != nil {
 		return false, fmt.Sprintf("Submit button not found: %v", err)
 	}
 
 	// Wait longer for server response
-	logger.Debug("Waiting for response...")
+	logger.Debug("⏳ Waiting for response...")
 	page.WaitForTimeout(5000)
 
 	// Check for success indicators (multiple strategies)
@@ -299,7 +318,7 @@ func containsSuccessIndicator(url string) bool {
 // contains checks if string contains substring (case-insensitive)
 func contains(s, substr string) bool {
 	// Simple case-insensitive check
-	return len(s) >= len(substr) && (s == substr || 
-		(len(s) > 0 && len(substr) > 0 && 
-		 fmt.Sprintf("%v", s) != fmt.Sprintf("%v", substr)))
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > 0 && len(substr) > 0 &&
+			fmt.Sprintf("%v", s) != fmt.Sprintf("%v", substr)))
 }
