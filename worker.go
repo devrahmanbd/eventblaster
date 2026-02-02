@@ -303,7 +303,7 @@ func performRegistration(page playwright.Page, eventURL, firstName, lastName, em
 	}
 
 	// Take screenshot for debugging
-	screenshotPath := fmt.Sprintf("debug_screenshot_%d.png", time.Now().Unix())
+	screenshotPath = fmt.Sprintf("debug_screenshot_%d.png", time.Now().Unix())
 	page.Screenshot(playwright.PageScreenshotOptions{
 		Path: playwright.String(screenshotPath),
 	})
