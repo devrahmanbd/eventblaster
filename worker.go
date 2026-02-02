@@ -177,7 +177,16 @@ func performRegistration(page playwright.Page, eventURL, firstName, lastName, em
 	}
 
 	logger.Info("✅ Page loaded successfully")
-	page.WaitForTimeout(2000)
+	screenshotPath := fmt.Sprintf("page_loaded_%d.png", time.Now().Unix())
+	page.Screenshot(playwright.PageScreenshotOptions{
+		Path: playwright.String(screenshotPath),
+		FullPage: playwright.Bool(true),
+	})
+	logger.Info("📸 Screenshot saved: %s", screenshotPath)
+
+	// Wait LONGER for JavaScript to render
+	page.WaitForTimeout(5000) // 5 seconds instead of 2
+	logger.Debug("📝 Filling form fields...")
 
 	logger.Debug("📝 Filling form fields...")
 
