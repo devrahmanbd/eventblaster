@@ -99,6 +99,8 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 			"--disable-dev-shm-usage",
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
+			"--lang=en-US",                  // ← ADD THIS: Force English US locale
+        	"--accept-lang=en-US,en",        // ← ADD THIS: Accept language
 		},
 	}
 
@@ -125,6 +127,8 @@ func (w *RegistrationWorker) tryRegistration(eventURL, firstName, lastName, emai
 
 	// Create context
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+		Locale:           playwright.String("en-US"),        // ← ADD THIS
+		TimezoneId:       playwright.String("America/New_York"), // ← ADD THIS
 		Viewport:  &playwright.Size{Width: 1248, Height: 836},
 		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	})
